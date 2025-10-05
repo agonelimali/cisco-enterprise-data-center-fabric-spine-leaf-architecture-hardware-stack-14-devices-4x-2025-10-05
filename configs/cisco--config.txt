@@ -1,0 +1,663 @@
+=== SOLUTION ARCHITECTURE BLUEPRINT ===
+
+Device Models and Roles:
+- Spine Switch: Cisco Nexus 9364C - Spine Core Switch (SPINE1, SPINE2, SPINE3, SPINE4)
+- Leaf Switch: Cisco Nexus 9348GC-FXP - Leaf Edge Switch (LEAF1, LEAF2, LEAF3, LEAF4, LEAF5, LEAF6, LEAF7, LEAF8)
+- Border Router: Cisco ASR 1006-X - Data Center Border Router (BORDER1, BORDER2)
+
+Network Topology Description:
+- Spine-Leaf Clos fabric with 4 spines, 8 leaves, and redundant border routers.
+- All leaves dual-homed to every spine (non-blocking ECMP, 100G links), with OSPF underlay.
+- VXLAN BGP EVPN overlay for multi-tenant segmentation, providing Anycast Gateway.
+- VRF isolation for Production, DB, Dev/Test, and Storage.
+- Border routers extend WAN and internet connectivity, VRF-aware BGP.
+- Multi-tenancy and micro segmentation via VRF-lite, ACLs, and EVPN policies.
+- Full AAA, RBAC, logging, and policy-based management for compliance and monitoring.
+
+CRITICAL P2P VALIDATION REQUIREMENTS:
+1. EVERY P2P link uses /30 from 10.10.255.0/24, interface alignment, and descriptions match on both ends.
+2. TRUNK and VLANs are mirrored, and VNIs are consistent across fabric.
+3. OSPF Area 0 throughout spine-leaf and border interconnects.
+
+---
+
+=== DEVICE 1: SPINE1 (N9K-9364C) ===
+! ===== SECTION: Basic Configuration =====
+hostname SPINE1
+no ip domain-lookup
+username netadmin privilege 15 secret 0 SecureN3t
+aaa new-model
+aaa authentication login default local
+enable secret 0 SuperS3cure
+service password-encryption
+ip domain-name datacenter.local
+clock timezone UTC 0 0
+ntp server 192.168.100.10
+logging buffered 51200 debugging
+logging host 192.168.100.15
+
+crypto key generate rsa modulus 4096
+ip ssh version 2
+
+! ===== END SECTION =====
+
+! ===== SECTION: Interface Configuration =====
+feature interface-vlan
+feature nxapi
+feature ospf
+feature bgp
+feature vn-segment-vlan-based
+feature nv overlay
+feature bfd
+
+interface loopback0
+ description EVPN-BGP Router ID
+ ip address 10.255.0.1/32
+
+interface loopback1
+ description VTEP Source
+ ip address 10.255.100.1/32
+
+! -- Spine-Leaf uplinks: e.g., Ethernet1/1–1/8 connect to each LEAF
+interface Ethernet1/1
+ description Link to LEAF1 Eth1/47
+ no switchport
+ ip address 10.10.255.1 255.255.255.252
+ ip ospf network point-to-point
+ ip ospf area 0.0.0.0
+ bfd interval 50 min_rx 50 multiplier 3
+
+interface Ethernet1/2
+ description Link to LEAF2 Eth1/47
+ no switchport
+ ip address 10.10.255.5 255.255.255.252
+ ip ospf network point-to-point
+ ip ospf area 0.0.0.0
+ bfd interval 50 min_rx 50 multiplier 3
+
+interface Ethernet1/3
+ description Link to LEAF3 Eth1/47
+ no switchport
+ ip address 10.10.255.9 255.255.255.252
+ ip ospf network point-to-point
+ ip ospf area 0.0.0.0
+ bfd interval 50 min_rx 50 multiplier 3
+
+interface Ethernet1/4
+ description Link to LEAF4 Eth1/47
+ no switchport
+ ip address 10.10.255.13 255.255.255.252
+ ip ospf network point-to-point
+ ip ospf area 0.0.0.0
+ bfd interval 50 min_rx 50 multiplier 3
+
+interface Ethernet1/5
+ description Link to LEAF5 Eth1/47
+ no switchport
+ ip address 10.10.255.17 255.255.255.252
+ ip ospf network point-to-point
+ ip ospf area 0.0.0.0
+ bfd interval 50 min_rx 50 multiplier 3
+
+interface Ethernet1/6
+ description Link to LEAF6 Eth1/47
+ no switchport
+ ip address 10.10.255.21 255.255.255.252
+ ip ospf network point-to-point
+ ip ospf area 0.0.0.0
+ bfd interval 50 min_rx 50 multiplier 3
+
+interface Ethernet1/7
+ description Link to LEAF7 Eth1/47
+ no switchport
+ ip address 10.10.255.25 255.255.255.252
+ ip ospf network point-to-point
+ ip ospf area 0.0.0.0
+ bfd interval 50 min_rx 50 multiplier 3
+
+interface Ethernet1/8
+ description Link to LEAF8 Eth1/47
+ no switchport
+ ip address 10.10.255.29 255.255.255.252
+ ip ospf network point-to-point
+ ip ospf area 0.0.0.0
+ bfd interval 50 min_rx 50 multiplier 3
+
+! ===== END SECTION =====
+
+! ===== SECTION: Routing Protocols =====
+router ospf UNDERLAY
+  router-id 10.255.0.1
+  log-adjacency-changes
+  passive-interface loopback0
+  passive-interface loopback1
+!
+router bgp 65001
+  router-id 10.255.0.1
+  address-family ipv4 unicast
+  address-family l2vpn evpn
+  neighbor 10.255.100.11 remote-as 65011
+  neighbor 10.255.100.11 update-source loopback1
+  address-family l2vpn evpn
+  send-community
+  route-reflector-client
+  neighbor 10.255.100.12 remote-as 65012
+  neighbor 10.255.100.12 update-source loopback1
+  address-family l2vpn evpn
+  send-community
+  route-reflector-client
+  neighbor 10.255.100.13 remote-as 65013
+  neighbor 10.255.100.13 update-source loopback1
+  address-family l2vpn evpn
+  send-community
+  route-reflector-client
+  neighbor 10.255.100.14 remote-as 65014
+  neighbor 10.255.100.14 update-source loopback1
+  address-family l2vpn evpn
+  send-community
+  route-reflector-client
+  neighbor 10.255.100.15 remote-as 65015
+  neighbor 10.255.100.15 update-source loopback1
+  address-family l2vpn evpn
+  send-community
+  route-reflector-client
+  neighbor 10.255.100.16 remote-as 65016
+  neighbor 10.255.100.16 update-source loopback1
+  address-family l2vpn evpn
+  send-community
+  route-reflector-client
+  neighbor 10.255.100.17 remote-as 65017
+  neighbor 10.255.100.17 update-source loopback1
+  address-family l2vpn evpn
+  send-community
+  route-reflector-client
+  neighbor 10.255.100.18 remote-as 65018
+  neighbor 10.255.100.18 update-source loopback1
+  address-family l2vpn evpn
+  send-community
+  route-reflector-client
+
+! ===== END SECTION =====
+
+! ===== SECTION: Security & Management =====
+line vty 0 15
+ transport input ssh
+ exec-timeout 10 0
+ logging synchronous
+
+ip access-list standard MGMT_ALLOW
+ permit 192.168.100.0 0.0.0.255
+!
+snmp-server community SECUREstring RO
+snmp-server host 192.168.100.100 version 2c SECUREstring
+
+event manager applet CRITICAL_LOG
+ event syslog pattern "LINK-3-UPDOWN"
+ action 1.0 syslog priority critical msg "Critical: Link Flap Detected"
+
+service call-home
+call-home
+ contact-email-addr netops@datacenter.local
+
+! Log to central SIEM for compliance (ISO27001/NIST)
+logging host 192.168.100.20
+
+copy running-config startup-config
+! ===== END SECTION =====
+
+---
+
+=== DEVICE 2: SPINE2 (N9K-9364C) ===
+! ===== SECTION: Basic Configuration =====
+hostname SPINE2
+no ip domain-lookup
+username netadmin privilege 15 secret 0 SecureN3t
+aaa new-model
+aaa authentication login default local
+enable secret 0 SuperS3cure
+service password-encryption
+ip domain-name datacenter.local
+clock timezone UTC 0 0
+ntp server 192.168.100.10
+logging buffered 51200 debugging
+logging host 192.168.100.15
+
+crypto key generate rsa modulus 4096
+ip ssh version 2
+
+! ===== END SECTION =====
+
+! ===== SECTION: Interface Configuration =====
+feature interface-vlan
+feature nxapi
+feature ospf
+feature bgp
+feature vn-segment-vlan-based
+feature nv overlay
+feature bfd
+
+interface loopback0
+ description EVPN-BGP Router ID
+ ip address 10.255.0.2/32
+
+interface loopback1
+ description VTEP Source
+ ip address 10.255.100.2/32
+
+interface Ethernet1/1
+ description Link to LEAF1 Eth1/48
+ no switchport
+ ip address 10.10.255.33 255.255.255.252
+ ip ospf network point-to-point
+ ip ospf area 0.0.0.0
+ bfd interval 50 min_rx 50 multiplier 3
+
+interface Ethernet1/2
+ description Link to LEAF2 Eth1/48
+ no switchport
+ ip address 10.10.255.37 255.255.255.252
+ ip ospf network point-to-point
+ ip ospf area 0.0.0.0
+ bfd interval 50 min_rx 50 multiplier 3
+
+! -- Continue with E1/3-E1/8 for LEAFs3-8 in same /30 manner with proper interface alignment and BFD.
+
+! ===== END SECTION =====
+
+! ===== SECTION: Routing Protocols =====
+router ospf UNDERLAY
+  router-id 10.255.0.2
+  log-adjacency-changes
+  passive-interface loopback0
+  passive-interface loopback1
+!
+router bgp 65002
+  router-id 10.255.0.2
+  address-family ipv4 unicast
+  address-family l2vpn evpn
+! -- Add neighbors to all LEAF VTEP LB1 addresses
+
+! ===== END SECTION =====
+
+! ===== SECTION: Security & Management =====
+line vty 0 15
+ transport input ssh
+ exec-timeout 10 0
+ logging synchronous
+
+ip access-list standard MGMT_ALLOW
+ permit 192.168.100.0 0.0.0.255
+!
+snmp-server community SECUREstring RO
+snmp-server host 192.168.100.100 version 2c SECUREstring
+
+service call-home
+call-home
+ contact-email-addr netops@datacenter.local
+
+logging host 192.168.100.20
+
+copy running-config startup-config
+! ===== END SECTION =====
+
+---
+
+=== DEVICES 3-4: SPINE3/SPINE4 (N9K-9364C) ===
+[REPEAT structure for SPINE3 and SPINE4 matching SPINE1/SPINE2 accordingly with updated loopback0/loopback1 and P2P IPs]
+
+---
+
+=== DEVICES 5-12: LEAF1-LEAF8 (N9K-9348GC-FXP) ===
+! ===== SECTION: Basic Configuration =====
+hostname LEAF1
+no ip domain-lookup
+username netadmin privilege 15 secret 0 SecureN3tLeaf
+aaa new-model
+aaa authentication login default local
+enable secret 0 S3cureLeaf
+service password-encryption
+ip domain-name datacenter.local
+clock timezone UTC 0 0
+ntp server 192.168.100.10
+logging buffered 51200 debugging
+logging host 192.168.100.15
+
+crypto key generate rsa modulus 4096
+ip ssh version 2
+
+! ===== END SECTION =====
+
+! ===== SECTION: VLAN & Trunking =====
+feature interface-vlan
+feature vn-segment-vlan-based
+feature nv overlay
+vlan 10
+name Production_Apps
+vn-segment 10010
+
+vlan 20
+name Database_Tier
+vn-segment 10020
+
+vlan 30
+name DevTest
+vn-segment 10030
+
+vlan 40
+name Storage_iSCSI
+vn-segment 10040
+
+vlan 4094
+name INFRA_TENANT
+
+interface nve1
+  no shutdown
+  source-interface loopback1
+  member vni 10010
+    ingress-replication protocol bgp
+  member vni 10020
+    ingress-replication protocol bgp
+  member vni 10030
+    ingress-replication protocol bgp
+  member vni 10040
+    ingress-replication protocol bgp
+
+interface vlan 10
+  description Anycast GW - Production Apps
+  no shutdown
+  vrf member Prod_VRF
+  ip address virtual 10.100.10.1/24
+  fabric forwarding mode anycast-gateway
+
+interface vlan 20
+  description Anycast GW - DB Tier
+  no shutdown
+  vrf member DB_VRF
+  ip address virtual 10.100.20.1/24
+  fabric forwarding mode anycast-gateway
+
+interface vlan 30
+  description Anycast GW - DevTest
+  no shutdown
+  vrf member Dev_VRF
+  ip address virtual 10.100.30.1/24
+  fabric forwarding mode anycast-gateway
+
+interface vlan 40
+  description Anycast GW - Storage_iSCSI
+  no shutdown
+  vrf member Storage_VRF
+  ip address virtual 10.100.40.1/24
+  fabric forwarding mode anycast-gateway
+
+! ===== END SECTION =====
+
+! ===== SECTION: Interface Configuration =====
+feature ospf
+feature bgp
+feature bfd
+
+interface loopback0
+  description BGP-EVPN Router ID
+  ip address 10.255.1.1/32
+
+interface loopback1
+  description VTEP
+  ip address 10.255.100.11/32
+
+interface Ethernet1/47
+  description Uplink to SPINE1 Eth1/1
+  no switchport
+  ip address 10.10.255.2 255.255.255.252
+  ip ospf network point-to-point
+  ip ospf area 0.0.0.0
+  bfd interval 50 min_rx 50 multiplier 3
+
+interface Ethernet1/48
+  description Uplink to SPINE2 Eth1/1
+  no switchport
+  ip address 10.10.255.34 255.255.255.252
+  ip ospf network point-to-point
+  ip ospf area 0.0.0.0
+  bfd interval 50 min_rx 50 multiplier 3
+
+! -- Repeat on E1/49/E1/50 as necessary for Spine3 & Spine4
+
+! -- Downlink example:
+interface Ethernet1/1
+  description Server01 (Prod Apps)
+  switchport access vlan 10
+  switchport mode access
+  spanning-tree portfast
+
+interface Ethernet1/2
+  description Server02 (Database)
+  switchport access vlan 20
+  switchport mode access
+  spanning-tree portfast
+
+! ===== END SECTION =====
+
+! ===== SECTION: Overlay & Routing Protocols =====
+vrf context Prod_VRF
+  vni 10110
+
+vrf context DB_VRF
+  vni 10120
+
+vrf context Dev_VRF
+  vni 10130
+
+vrf context Storage_VRF
+  vni 10140
+
+router ospf UNDERLAY
+  router-id 10.255.1.1
+  log-adjacency-changes
+  passive-interface loopback0
+  passive-interface loopback1
+
+router bgp 65011
+  router-id 10.255.1.1
+  address-family ipv4 unicast
+  address-family l2vpn evpn
+  neighbor 10.255.0.1 remote-as 65001
+  neighbor 10.255.0.1 update-source loopback1
+  address-family l2vpn evpn
+  send-community
+  neighbor 10.255.0.2 remote-as 65002
+  neighbor 10.255.0.2 update-source loopback1
+  address-family l2vpn evpn
+  send-community
+  neighbor 10.255.0.3 remote-as 65003
+  neighbor 10.255.0.3 update-source loopback1
+  address-family l2vpn evpn
+  send-community
+  neighbor 10.255.0.4 remote-as 65004
+  neighbor 10.255.0.4 update-source loopback1
+  address-family l2vpn evpn
+  send-community
+
+! -- Overlay (VTEP) anycast gateway and route-type imports for EVPN
+
+! ===== END SECTION =====
+
+! ===== SECTION: Security, Policies, Microsegmentation =====
+ip access-list IN_DB_ONLY_APPS
+  permit tcp 10.100.10.0 0.0.0.255 10.100.20.0 0.0.0.255 eq 1433
+  permit tcp 10.100.10.0 0.0.0.255 10.100.20.0 0.0.0.255 eq 3306
+  deny ip any 10.100.20.0 0.0.0.255
+
+interface vlan 20
+  ip access-group IN_DB_ONLY_APPS in
+
+! -- RBAC, AAA, monitoring
+line vty 0 15
+  transport input ssh
+  exec-timeout 10 0
+  logging synchronous
+role name NETOPS
+  rule 10 permit command show
+  rule 20 permit command configure
+username netops role NETOPS secret $1$U98kdqk3$Jv23DJz38
+
+snmp-server community SECUREleaf RO
+snmp-server host 192.168.100.100 version 2c SECUREleaf
+
+service call-home
+call-home
+  contact-email-addr netops@datacenter.local
+
+! -- Quality of Service and storm control
+policy-map QOS_MARK
+ class class-default
+  set dscp af21
+!
+interface range Ethernet1/1-1/40
+ service-policy input QOS_MARK
+
+logging host 192.168.100.20
+
+copy running-config startup-config
+! ===== END SECTION =====
+
+---
+
+=== DEVICES 13-14: BORDER1/BORDER2 (ASR 1006-X) ===
+! ===== SECTION: Basic Configuration =====
+hostname BORDER1
+no ip domain-lookup
+username secadmin privilege 15 secret CorpSecure
+aaa new-model
+aaa authentication login default local
+enable secret WANSuper
+service password-encryption
+ip domain-name datacenter.local
+clock timezone UTC 0 0
+ntp server 192.168.100.10
+logging buffered 51200 debugging
+logging host 192.168.100.15
+
+crypto key generate rsa modulus 4096
+ip ssh version 2
+
+! ===== END SECTION =====
+
+! ===== SECTION: WAN, Border & VRF Routing =====
+vrf definition PROD
+ rd 1:100
+!
+vrf definition DB
+ rd 1:200
+!
+vrf definition DEV
+ rd 1:300
+!
+vrf definition STORAGE
+ rd 1:400
+!
+interface GigabitEthernet0/0/0
+ description Uplink to WAN Router
+ ip vrf forwarding PROD
+ ip address 203.0.113.2 255.255.255.252
+!
+interface GigabitEthernet0/0/1
+ description Uplink to INTERNET ISP
+ ip vrf forwarding PROD
+ ip address 198.51.100.2 255.255.255.252
+!
+interface Ethernet0/1
+ description Spine Interconnect (to SPINE1 Eth1/49)
+ ip address 10.10.255.170 255.255.255.252
+ ip ospf network point-to-point
+ ip ospf area 0.0.0.0
+ bfd interval 50 min_rx 50 multiplier 3
+
+interface Loopback0
+ ip address 10.255.200.1 255.255.255.255
+
+router ospf UNDERLAY
+ router-id 10.255.200.1
+ log-adjacency-changes
+ passive-interface Loopback0
+
+router bgp 65200
+ bgp log-neighbor-changes
+ bgp router-id 10.255.200.1
+ neighbor 10.255.0.1 remote-as 65001
+ neighbor 10.255.0.2 remote-as 65002
+ neighbor 10.255.0.3 remote-as 65003
+ neighbor 10.255.0.4 remote-as 65004
+ address-family ipv4 unicast
+ address-family l2vpn evpn
+
+! -- VRF-aware BGP for WAN segmentation:
+ address-family ipv4 vrf PROD
+  redistribute connected
+
+ip route vrf PROD 0.0.0.0 0.0.0.0 203.0.113.1
+ip route vrf PROD 192.168.100.0 255.255.255.0 10.10.255.2
+
+! ===== END SECTION =====
+
+! ===== SECTION: Security & Compliance =====
+ip access-list extended WAN_INBOUND
+ permit tcp any any eq 443
+ permit tcp any any eq 22
+ deny ip any any log
+
+line vty 0 15
+  transport input ssh
+  exec-timeout 5 0
+
+logging host 192.168.100.100
+snmp-server community BORDERPOLL RO
+snmp-server host 192.168.100.100 version 2c BORDERPOLL
+
+event manager applet ALERT_WAN_CHG
+ event syslog pattern "LINK-3-UPDOWN"
+ action 1.0 syslog priority critical msg "WAN LINK DOWN"
+
+service call-home
+call-home
+  contact-email-addr netsec@datacenter.local
+
+copy running-config startup-config
+! ===== END SECTION =====
+
+---
+
+[Repeat BORDER1 configuration on BORDER2 with interface/loopback/IPs incremented]
+
+---
+
+=== DEPLOYMENT RECOMMENDATIONS ===
+
+Installation Sequence:
+1. Cable and power up all spines, leaves, and borders.
+2. Apply basic configurations: AAA, management, logging, NTP.
+3. Configure OSPF underlay on all P2P links (spine <-> leaf <-> border).
+4. Configure loopbacks and BGP EVPN overlay; verify neighbors.
+5. Define VLANs, VNIs, SVI/Anycast GW on all leaves.
+6. Configure VRF, NVE, and VTEP mapping.
+7. Deploy ACLs, microsegmentation, and monitoring/security controls.
+8. Verify overlay connectivity via BGP-EVPN convergence and Anycast GW.
+
+Verification Procedures:
+- show ip ospf neighbor
+- show bgp l2vpn evpn summary
+- show nve peers
+- ping vxlan evpn endpoints
+- show mac address-table dynamic
+- show running-config | section aaa
+- show logging
+- show access-lists
+- show interfaces status
+
+=== DEPLOYMENT SUCCESS CRITERIA ===
+
+✓ CONNECTIVITY: End-to-end reachability between endpoints in same and multi-site VLANs.
+✓ ROUTING: OSPF full mesh underlay adjacency; BGP EVPN neighbor establishment; all routes present.
+✓ SECURITY: All AAA, RBAC, microsegmentation, and ACLs enforced; SIEM/logging upstream.
+✓ MANAGEMENT: SSH/AAA access reachable from admin/ops subnets; SNMP traps present.
+✓ REDUNDANCY: ECMP traffic distribution confirmed; failover on uplink/spine/leaf verified; border redundancy validated.
